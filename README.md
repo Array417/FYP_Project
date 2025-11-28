@@ -1,5 +1,5 @@
 
-# 🧠 AI-Driven Socratic Tutor (GenAI EdTech App)
+# 🧠 AI-Driven Tutor (GenAI EdTech App)
 
 ![Project Status](https://img.shields.io/badge/Status-Prototype-green)
 ![Tech Stack](https://img.shields.io/badge/Stack-React_Firebase_Gemini-blue)
