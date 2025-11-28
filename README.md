@@ -32,7 +32,7 @@ This project was developed as a **Final Year Project (FYP)** to explore the inte
 * Node.js (v16 or higher)
 * npm or yarn
 
-### Installation
+### Installation(Important!) — Secure Setup
 
 1. **Clone the repository**
 
@@ -47,23 +47,47 @@ This project was developed as a **Final Year Project (FYP)** to explore the inte
    ```
 3. **Configuration (Important!)**
 
-   * Create a file named `config.js` (or `.env` if you used environment variables) in the `src` folder.
-   * Add your Firebase and Gemini API credentials. *Note: This project requires your own API keys to function.*
+   * This project uses **environment variables** to keep all API keys secure.
 
-   ```javascript
-   // Example config.js structure
-   export const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY";
-   export const firebaseConfig = {
-     apiKey: "YOUR_FIREBASE_API_KEY",
-     // ... other firebase config
-   };
-   ```
-4. **Run the Application**
+   ## **① Create a `.env` file (do NOT commit this file)**
 
-   ```bash
-   npm run dev
-   # or 'npm start' depending on your setup
+   Inside the project root, create a file named:
+
+   `.env`
+
+   Add the following environment variables:
+
+
    ```
+   VITE_GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+
+   VITE_FIREBASE_API_KEY=YOUR_FIREBASE_API_KEY
+   VITE_FIREBASE_AUTH_DOMAIN=YOUR_FIREBASE_AUTH_DOMAIN
+   VITE_FIREBASE_PROJECT_ID=YOUR_FIREBASE_PROJECT_ID
+   VITE_FIREBASE_STORAGE_BUCKET=YOUR_FIREBASE_STORAGE_BUCKET
+   VITE_FIREBASE_MESSAGING_SENDER_ID=YOUR_FIREBASE_MESSAGING_SENDER_ID
+   VITE_FIREBASE_APP_ID=YOUR_FIREBASE_APP_ID
+   VITE_FIREBASE_MEASUREMENT_ID=YOUR_FIREBASE_MEASUREMENT_ID
+   ```
+
+   > 🔒 **Important:**
+   >
+   > `.env` is ignored by Git, so your API keys will NOT be pushed to GitHub.
+   >
+
+   ## **③ Ensure `.env` is ignored by Git**
+
+   Your `.gitignore` should include:
+
+   ```
+   .env
+   ```
+
+   ---
+
+   ## **④ Start the App**
+
+   `npm run dev`
 
 ## 📂 Project Structure
 
@@ -81,7 +105,7 @@ This project was developed as a **Final Year Project (FYP)** to explore the inte
 
 * [X] **Phase 1: MVP Core** (Socratic Mode, Auth, DB) - *Completed*
 * [ ] **Phase 2: Debate Mode** (Devil's Advocate) - *Currently In Development*
-* [ ] **Phase 3: Learning Analytics** - Dashboard for students to review their thinking patterns.
+* [ ] **Phase 3: Develop other mode** *- pending*
 
 ## 👨‍💻 Author
 
