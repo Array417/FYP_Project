@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 
 import {
   Box, TextField, Button, Paper, Typography, Avatar, CircularProgress,
-  List, ListItemButton, ListItemText, Divider, IconButton, AppBar, Toolbar
+  List, ListItemButton, ListItemText, Divider, IconButton, AppBar, Toolbar, Chip, Stack
 } from '@mui/material';
 
 import SendIcon from '@mui/icons-material/Send';
@@ -13,6 +13,9 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 
+import AttachFileIcon from '@mui/icons-material/AttachFile'; // ✨ 新增迴紋針圖示
+import CloseIcon from '@mui/icons-material/Close'; // ✨ 新增關閉圖示
+
 import { GEMINI_API_KEY, SOCRATIC_INSTRUCTION } from '../config';
 import { db } from '../config';
 import {
@@ -21,13 +24,17 @@ import {
 } from 'firebase/firestore';
 
 function SocraticMode({ onBack, user }) {
-  const [messages, setMessages] = useState([{ role: 'model', text: "你好！我是你的思考導師 Gemini。" }]);
+  const [messages, setMessages] = useState([{ role: 'model', text: "Hello！I am your Tutor。" }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [chatList, setChatList] = useState([]);
   const [selectedChatId, setSelectedChatId] = useState(null);
 
   const [chatTitle, setChatTitle] = useState("");
+
+  // ✨ 新增：儲存使用者選取的 PDF 檔案 (尚未發送)
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const fileInputRef = useRef(null); // 用來控制隱藏的 input
 
   const messagesEndRef = useRef(null);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -59,16 +66,19 @@ function SocraticMode({ onBack, user }) {
   const handleNewChat = () => {
     setSelectedChatId(null);
     setChatTitle("");
-    setMessages([{ role: 'model', text: "你好！我是你的思考導師 Gemini。" }]);
+    setMessages([{ role: 'model', text: "Hello！I am your Tutor。" }]);
+    setSelectedFiles([]);
   };
 
   // 歷史對話
   const handleSelectChat = (chat) => {
     setSelectedChatId(chat.id);
+    setSelectedFiles([]);
+    setChatTitle(chat.title || ""); 
     if (Array.isArray(chat.messages) && chat.messages.length) {
       setMessages(chat.messages);
     } else {
-      setMessages([{ role: 'model', text: "（此對話目前沒有訊息）" }]);
+      setMessages([{ role: 'model', text: "（no messages in this chat.）" }]);
     }
   };
 
@@ -83,46 +93,92 @@ function SocraticMode({ onBack, user }) {
     }
   };
 
+  // ✨ 新增：處理檔案選擇
+  const handleFileSelect = (event) => {
+    const files = Array.from(event.target.files);
+    // 過濾非 PDF (雖然 input accept 擋了一層，但多做檢查比較保險)
+    const pdfFiles = files.filter(f => f.type === 'application/pdf');
+    if (pdfFiles.length > 0) {
+      setSelectedFiles(prev => [...prev, ...pdfFiles]);
+    }
+  };
+
+  // ✨ 新增：移除已選檔案
+  const handleRemoveFile = (indexToRemove) => {
+    setSelectedFiles(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
+
+  // ✨ 新增：將檔案轉為 Base64 (Gemini 需要的格式)
+  const fileToGenerativePart = async (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64Data = reader.result.split(',')[1];
+        resolve({
+          inlineData: {
+            data: base64Data,
+            mimeType: file.type
+          }
+        });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   // 發送訊息 + 自動儲存
   // 在 handleSend 裡面
   const handleSend = async () => {
-    if (!input.trim() || !user) return;
+    if ((!input.trim() && selectedFiles.length === 0) || !user) return;
 
     const userMessage = input;
+    const filesToSend = [...selectedFiles];
+
     setInput('');
+    setSelectedFiles([]);
     setLoading(true);
 
+    // 顯示在 UI 的訊息 (不含 Base64，只含檔名)
+    let displayMessageText = userMessage;
+    if (filesToSend.length > 0) {
+      const fileNames = filesToSend.map(f => `[📄 ${f.name}]`).join(' ');
+      displayMessageText = `${userMessage}\n${fileNames}`.trim();
+    }
+
     // 更新前端訊息
-    const newMessages = [...messages, { role: 'user', text: userMessage }];
+    const newMessages = [...messages, { role: 'user', text: displayMessageText }];
     setMessages(newMessages);
 
     try {
       let currentChatId = selectedChatId;
       let title = chatTitle;
+      const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-      // 第一次發送，創建新的 chat document
+      // --- 1. 處理新對話標題 ---
       if (!currentChatId) {
-
-        const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+        const titlePrompt = userMessage || "PDF Analysis";
+        
+        // 產生標題時不需要傳送 PDF，純文字即可
         const titleResponse = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-2.5-flash", 
           contents: [{
             role: "user",
-            parts: [{ text: `請幫我為這條訊息生成一句簡短的單一標題，不超過7個字，不加其他說明：${userMessage}` }]
+            parts: [{ text: `請幫我為這條訊息生成一句簡短的單一標題使用英文，不超過7個字，不加其他說明：${titlePrompt}` }]
           }]
         });
-        title = titleResponse.candidates?.[0]?.content?.parts?.[0]?.text?.slice(0, 50) || userMessage.slice(0, 50) || "新對話";
+        
+        title = titleResponse.candidates?.[0]?.content?.parts?.[0]?.text?.slice(0, 50) || "New Chat";
 
         const payload = {
           userId: user.uid,
           title,
-          messages: [{ role: 'user', text: userMessage }],
+          messages: [{ role: 'user', text: displayMessageText }],
           createdAt: serverTimestamp()
         };
         const ref = await addDoc(collection(db, 'chats'), payload);
         currentChatId = ref.id;
         setSelectedChatId(ref.id);
-        setChatTitle(title); // 更新 AppBar 顯示
+        setChatTitle(title);
       } else {
         // 已有 chat document → 更新 messages
         const chatRef = doc(db, 'chats', currentChatId);
@@ -132,24 +188,37 @@ function SocraticMode({ onBack, user }) {
         });
       }
 
-      // 呼叫 AI 回覆
-      const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-      const conversationHistory = newMessages.map(m =>
+      // --- 2. 準備 Prompt 與 檔案 ---
+      
+      const historyParts = newMessages.slice(0, -1).map(m => 
         `${m.role === 'user' ? 'User' : 'Model'}: ${m.text}`
       ).join('\n');
 
-      const fullPrompt = `
+      const fullPromptText = `
 ${SOCRATIC_INSTRUCTION}
 
-以下是目前的對話紀錄：
-${conversationHistory}
-User: ${userMessage}
-Model:
+Conversation History:
+${historyParts}
+
+Current User Input: ${userMessage}
+(The user may have attached documents. Please answer based on them if present.)
 `;
 
+      // ✨ 修正點 A：建立 parts 陣列
+      const currentParts = [{ text: fullPromptText }];
+      
+      // 處理 PDF 轉 Base64 並加入 parts
+      if (filesToSend.length > 0) {
+        for (const file of filesToSend) {
+          const filePart = await fileToGenerativePart(file);
+          currentParts.push(filePart);
+        }
+      }
+
+      // --- 3. 呼叫 Gemini ---
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: [{ text: fullPrompt }] }]
+        contents: [{ role: "user", parts: currentParts }] // ✨ 修正點 C：這裡傳入 currentParts (包含 PDF)，而不是未定義的 fullPrompt
       });
 
       const aiText = response.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -165,6 +234,7 @@ Model:
 
     } catch (err) {
       console.error("發送/儲存失敗", err);
+      alert("Error: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -178,20 +248,23 @@ Model:
             <ArrowBackIcon />
           </IconButton>
           <SmartToyIcon sx={{ mr: 2 }} />
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>{`模式 A：蘇格拉底引導${chatTitle ? ' - ' + chatTitle : ''}`}</Typography>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>{`Socratic Mode${chatTitle ? ' - ' + chatTitle : ''}`}</Typography>
         </Toolbar>
       </AppBar>
 
       <Box sx={{ flexGrow: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* 左側 Sidebar */}
+        {/* Sidebar */}
         <Box sx={{ width: 260, borderRight: '1px solid #ddd', p: 2, bgcolor: '#fff', display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <Button variant="contained" startIcon={<AddIcon />} fullWidth onClick={handleNewChat}>新對話</Button>
+          <Button variant="contained" startIcon={<AddIcon />} fullWidth onClick={handleNewChat}>New Chat</Button>
           <Divider />
-          <Typography variant="subtitle1" sx={{ color: 'black' }}>歷史對話</Typography>
           <List sx={{ overflowY: 'auto', flexGrow: 1 }}>
             {chatList.map(chat => (
               <ListItemButton key={chat.id} selected={selectedChatId === chat.id} onClick={() => handleSelectChat(chat)}>
-                <ListItemText primary={chat.title || "未命名"} secondary={chat.createdAt?.toDate?.().toLocaleString?.() || ""} primaryTypographyProps={{ color: 'black' }} />
+                <ListItemText 
+                  primary={chat.title || "Untitled"} 
+                  secondary={chat.createdAt?.toDate?.().toLocaleString?.() || ""} 
+                  primaryTypographyProps={{ noWrap: true, color: 'black' }} // 防止標題過長
+                />
                 <IconButton edge="end" onClick={(e) => { e.stopPropagation(); handleDeleteChat(chat.id); }}>
                   <DeleteIcon fontSize="small" />
                 </IconButton>
@@ -200,7 +273,7 @@ Model:
           </List>
         </Box>
 
-        {/* 右側 ChatBox */}
+        {/* Chat Area */}
         <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', p: 2 }}>
           <Box sx={{ flexGrow: 1, overflowY: 'auto', mb: 2, p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {messages.map((msg, index) => (
@@ -215,25 +288,65 @@ Model:
             {loading && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <CircularProgress size={20} />
-                <Typography sx={{ color: '#000' }}>思考中...</Typography>
+                <Typography sx={{ color: '#000' }}>Analyzing Docs & Thinking...</Typography>
               </Box>
             )}
             <div ref={messagesEndRef} />
           </Box>
 
-          <Paper elevation={3} sx={{ p: 2, display: 'flex', gap: 1 }}>
-            <TextField
-              fullWidth variant="outlined" placeholder="輸入你的想法..."
-              value={input} onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleSend(); }}
-              disabled={loading} size="small"
-            />
-            <Button variant="contained" endIcon={<SendIcon />} onClick={handleSend} disabled={loading}>send</Button>
+          {/* Input Area */}
+          <Paper elevation={3} sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+            
+            {/* ✨ 新增：顯示已選擇的檔案 */}
+            {selectedFiles.length > 0 && (
+              <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', pb: 1 }}>
+                {selectedFiles.map((file, index) => (
+                  <Chip
+                    key={index}
+                    icon={<AttachFileIcon />}
+                    label={file.name}
+                    onDelete={() => handleRemoveFile(index)}
+                    deleteIcon={<CloseIcon />}
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                  />
+                ))}
+              </Stack>
+            )}
+
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              {/* ✨ 新增：隱藏的 input 和 迴紋針按鈕 */}
+              <input
+                type="file"
+                multiple
+                accept="application/pdf"
+                style={{ display: 'none' }}
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+              />
+              <IconButton color="primary" onClick={() => fileInputRef.current.click()} disabled={loading}>
+                <AttachFileIcon />
+              </IconButton>
+
+              <TextField
+                fullWidth variant="outlined" 
+                placeholder={selectedFiles.length > 0 ? "Ask questions about the PDF..." : "Type your message..."}
+                value={input} onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleSend(); }}
+                disabled={loading} size="small"
+                multiline maxRows={3} // 允許輸入多行
+              />
+              <Button variant="contained" endIcon={<SendIcon />} onClick={handleSend} disabled={loading || (!input.trim() && selectedFiles.length === 0)}>
+                send
+              </Button>
+            </Box>
           </Paper>
         </Box>
       </Box>
     </Box>
   );
 }
+
 
 export default SocraticMode;

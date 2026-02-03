@@ -12,7 +12,7 @@ function DebateMode({ onBack }) {
             <ArrowBackIcon />
           </IconButton>
           <GavelIcon sx={{ mr: 2 }} />
-          <Typography variant="h6">模式 B：惡魔辯論 (開發中)</Typography>
+          <Typography variant="h6">Mode B: 惡魔辯論 (開發中)</Typography>
         </Toolbar>
       </AppBar>
 

@@ -9,8 +9,8 @@ function LoginPage() {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
-      console.error("登入失敗", error);
-      alert("登入失敗，請重試");
+      console.error("Login Failed", error);
+      alert("Login Failed, please try again.");
     }
   };
 
@@ -20,10 +20,10 @@ function LoginPage() {
         <Paper elevation={6} sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', borderRadius: 4 }}>
           <PsychologyIcon sx={{ fontSize: 60, color: '#1976d2', mb: 2 }} />
           <Typography variant="h5" gutterBottom fontWeight="bold">
-            生成式 AI 思維訓練系統
+            AI-Driven Tutor
           </Typography>
           <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4 }}>
-            請登入以儲存您的學習進度與對話紀錄
+            Login to save your learning progress and chat history.
           </Typography>
 
           <Button 
@@ -34,7 +34,7 @@ function LoginPage() {
             fullWidth
             sx={{ bgcolor: '#4285F4', '&:hover': { bgcolor: '#357ae8' }, py: 1.5 }}
           >
-            使用 Google 帳號登入
+            Please sign in with Google
           </Button>
         </Paper>
       </Container>
